@@ -1,0 +1,12 @@
+*.o
+*.a
+*.swp
+
+main.elf
+main.bin
+main.map
+main.info_elf
+tags
+cscope.out
+cscope.in.out
+cscope.po.out

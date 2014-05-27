@@ -1,6 +1,7 @@
 *.o
 *.a
 *.swp
+*.log
 
 main.elf
 main.bin

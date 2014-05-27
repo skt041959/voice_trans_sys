@@ -34,7 +34,7 @@ typedef enum {
 }work_mode;
 
 u8 sync[32] = {
-    0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,
+    0x00,'s' ,'y' ,'n' ,'c' ,0x00,0xFF,0x00,
     0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,
     0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,
     0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00};
@@ -220,8 +220,8 @@ void terminal_detect();
 void center_detect(u8);
 u8 virtual_com_send();
 u8 spi_flash_store();
-void Send_Sync();
-void Receive_Sync();
+void handshaking_rx();
+void handshaking_tx(u8);
 
 int main(void)
 {
@@ -305,7 +305,7 @@ void terminal_main()
     NVIC_Config();
     Sampling_Config();
 
-    //u8 index = 1;
+    u8 index = 1;
     //if( (uint16_t)(GPIOD->IDR & (GPIO_Pin_12 | GPIO_Pin_13)) == 0x1000 )
     //    index = 1;
     //else if( (uint16_t)(GPIOD->IDR & (GPIO_Pin_12 | GPIO_Pin_13)) == 0x2000 )
@@ -314,15 +314,12 @@ void terminal_main()
     nRF24L01_Initial();
     Repower_NRF24L01();
 
-    Config_Send_PORT();
+    handshaking_tx();
     //center_detect(index);
 
     //u8 ADDR[5];
 
     //SPI_Read_Buf(PORT2, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
-
-    DMA_Cmd(DMA1_Channel1, ENABLE);
-    TIM_Cmd(TIM2, ENABLE);
 
     while(1)
     {
@@ -342,7 +339,7 @@ void terminal_main()
 
 void center_main()
 {
-    u8 (*process_packge)();
+    //u8 (*process_packge)();
 
     GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);
     Set_System();
@@ -361,7 +358,7 @@ void center_main()
     //}
     //else
         //process_packge = &spi_flash_store;
-    process_packge = &virtual_com_send;
+    //process_packge = &virtual_com_send;
 
     Send_Buffer[0] = 0xFF;
     Send_Buffer[34] = 0xFF;
@@ -375,9 +372,8 @@ void center_main()
     //u8 rpd;
     u8 status;
     u8 * rx_buffer = Send_Buffer + 2;
-    Send_Sync();
-    Config_Receive_PORT();
-    //terminal_detect();
+
+    handshaking_rx();
 
     //SPI_Read_Buf(PORT2, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
 
@@ -493,6 +489,10 @@ void Send_Sync()
 
 void Receive_Sync()
 {
+    u8 status=0x00;
+    u8 synced = 1;
+    u8 i;
+
     PORT1_CLR_CE;
 
     SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_0, TX_ADR_WIDTH);
@@ -505,10 +505,72 @@ void Receive_Sync()
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x7f);
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x03);
     PORT1_SET_CE;
+
+    while(synced)
+    {
+unsynced:
+        while(PORT1_IRQ);
+
+        status=SPI_RDR(PORT1, STATUS);
+        if(status & 0x40)
+        {
+            SPI_Read_Buf(PORT1, RD_RX_PLOAD,RX_BUF,TX_PLOAD_WIDTH);
+
+            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
+        }
+        for(i=0; i<6; i++)
+        {
+            if(RX_BUF[i] != sync[i])
+                goto unsynced;
+        }
+        synced = 0;
+    }
 }
 
-u8 virtual_com_send()
+void handshaking_rx()
 {
+    u8 replyed = 0;
+    u8 status = 0x00;
+
+    Send_Sync();
+    Config_Receive_PORT();
+    while(replyed < 3)
+    {
+invalidreply:
+        while(PORT1_IRQ);
+
+        status = SPI_RDR(PORT1, STATUS);
+        if(status & 0x40)
+        {
+            SPI_Read_Buf(PORT1, RD_RX_PLOAD, RX_BUF, TX_PLOAD_WIDTH);
+            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
+
+            for(i=1; i<6; i++)
+            {
+                if(RX_BUF[i] != sync[i])
+                    goto invalidreply;
+            }
+            replyed |= RX_BUF[0];
+        }
+    }
+}
+
+void handshaking_tx(u8 index)
+{
+    Receive_Sync();
+    DMA_Cmd(DMA1_Channel1, ENABLE);
+    TIM_Cmd(TIM2, ENABLE);
+    sync[0]=index;
+    Config_Send_PORT();
+
+    if(index == 2)
+    {
+        TIM3->CNT = 2;
+        TIM_Cmd(TIM3, ENABLE);
+        while(TIM3->CNT);
+        TIM_Cmd(TIM3, DISABLE);
+    }
+    PORT1_Send(sync);
 }
 
 u8 spi_flash_store()

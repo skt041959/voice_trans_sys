@@ -10,8 +10,14 @@ ifeq ($(CHIP),LD)
 	OBJS+=startup/startup_stm32f10x_ld.o
 endif
 
-ifdef DEBUG
-	CFLAGS+=-DDEBUG
+ifdef TX
+	CFLAGS+=-DDEBUG_TX
+else
+ifdef RX
+	CFLAGS+=-DDEBUG_RX
+else
+	CFLAGS+=-DRELEASE
+endif
 endif
 
 #OBJS+=./newlib_stubs.o

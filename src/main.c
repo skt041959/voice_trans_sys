@@ -27,10 +27,10 @@ uint8_t Send_Buffer[64];
 uint32_t packet_sent = 1;
 uint32_t packet_receive = 1;
 typedef enum {
-    center = 3,
-    storage = 2,
-    terminal = 1,
-    trunk = 0,
+    center = 0,
+    storage = 1,
+    terminal = 2,
+    trunk = 3,
 }work_mode;
 
 u8 sync[32] = {
@@ -181,7 +181,6 @@ void LED_Config()
     GPIO_Init(GPIOD, &GPIO_InitStruct);
 }
 
-#ifdef DEBUG
 void USART_Config()
 {
     RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1 | RCC_APB2Periph_GPIOA, ENABLE);
@@ -203,7 +202,6 @@ void USART_Config()
     USART_Init(USART1,&USART_InitStruct);
     USART_Cmd(USART1,ENABLE);
 }
-#endif
 
 u8 PORT1_SENT=1, PORT2_SENT=1;
 u8 PORT_RECEIVE = 0;
@@ -234,27 +232,26 @@ int main(void)
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
 
-#ifndef DEBUG
+#ifdef RELEASE
     LED_Config();
     switch_config();
-    mode = (uint16_t)(GPIOD->IDR & (GPIO_Pin_14 | GPIO_Pin_15)) >> 14;
-    //switch(mode)
-    //{
-    //    case center:main_thread = &center_main;
-    //                break;
-    //    case storage:main_thread = &storage_main;
-    //                break;
-    //    case terminal:main_thread = &terminal_main;
-    //                break;
-    //    case trunk:main_thread = &trunk_main;
-    //                break;
-    //}
+    mode = (uint16_t)(GPIOD->IDR & (GPIO_Pin_12 | GPIO_Pin_13)) >> 12;
+    switch(mode)
+    {
+        case center:main_thread = &center_main;
+                    break;
+        case storage:main_thread = &storage_main;
+                    break;
+        case terminal:main_thread = &terminal_main;
+                    break;
+        case trunk:main_thread = &trunk_main;
+                    break;
+    }
 
-    main_thread = &center_main;
     main_thread();
 #endif
 
-#ifdef DEBUG
+#ifdef DEBUG_TX
     //GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);
     //Set_System();
     //Set_USBClock();
@@ -267,16 +264,30 @@ int main(void)
     /*TIM_Cmd(TIM2, ENABLE);*/
     USART_Config();
     nRF24L01_Initial();
+    Repower_NRF24L01();
 
     LED_Config();
     //GPIO_Pin_10 green
     //GPIO_Pin_11 red
 
-    Config_Send_PORT();
+    //Config_Send_PORT();
     //Config_Receive_PORT();
+    //
+    PORT1_CLR_CE;
+    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_0, TX_ADR_WIDTH);
+
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_AA, 0x00);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x00);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + SETUP_AW, 0x00);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x0F);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x70);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x02);
+ 
     TX_BUF[0]=0x55;
     u8 ADDR[5];
     u8 tmp;
+    u8 status = 0x00;
     SPI_Read_Buf(PORT1, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
     tmp = SPI_RDR(PORT1, READ_REG_NRF24L01 + RX_PW_P0);
     //SPI_Read_Buf(PORT1, READ_REG_NRF24L01 + RX_ADDR_P1, ADDR, 5);
@@ -291,8 +302,21 @@ int main(void)
 
     while(1)
     {
-        PORT1_Send(TX_BUF);
-
+        //PORT1_Send(TX_BUF);
+        GPIOD->BRR = GPIO_Pin_10;
+        SPI_Write_Buf(PORT1, WR_TX_PLOAD, sync, TX_PLOAD_WIDTH);
+        PORT1_SET_CE;
+        while(PORT1_IRQ);
+        PORT1_CLR_CE;
+        status = SPI_RDR(PORT1, STATUS);
+        if(status & TX_DS)	/*tx_ds == 0x20*/
+        {
+            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x20);
+            GPIOD->BSRR = GPIO_Pin_10;
+        }
+        tmp = 0xFF;
+        while(tmp--);
+ 
         //PORT1_Receive();
     }
 #endif
@@ -305,16 +329,17 @@ void terminal_main()
     NVIC_Config();
     Sampling_Config();
 
-    u8 index = 1;
-    //if( (uint16_t)(GPIOD->IDR & (GPIO_Pin_12 | GPIO_Pin_13)) == 0x1000 )
-    //    index = 1;
-    //else if( (uint16_t)(GPIOD->IDR & (GPIO_Pin_12 | GPIO_Pin_13)) == 0x2000 )
-    //    index = 2;
+    u8 index = 0;
+    if( GPIOD->IDR & GPIO_Pin_15 )
+        index = 1;
+    else
+        index = 2;
 
     nRF24L01_Initial();
     Repower_NRF24L01();
 
-    handshaking_tx();
+    GPIOD->BSRR = GPIO_Pin_10 | GPIO_Pin_11;
+    handshaking_tx(index);
     //center_detect(index);
 
     //u8 ADDR[5];
@@ -373,6 +398,7 @@ void center_main()
     u8 status;
     u8 * rx_buffer = Send_Buffer + 2;
 
+    GPIOD->BSRR = GPIO_Pin_10 | GPIO_Pin_11;
     handshaking_rx();
 
     //SPI_Read_Buf(PORT2, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
@@ -401,81 +427,24 @@ void trunk_main()
 {
 }
 
-void terminal_detect()
-{
-    u8 status = 0x00;
-    u8 terminals = 0;
-    while( terminals < 2 )
-    {
-        while(PORT1_IRQ);
-        PORT1_CLR_CE;
-
-        status=SPI_RDR(PORT1, STATUS);
-        if(status & 0x40)
-        {
-            if( (status & 0x0E) == 0x00 )
-            {
-                SPI_Read_Buf(PORT1, RD_RX_PLOAD, RX_BUF, TX_PLOAD_WIDTH);
-                SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P0 + terminals, RX_BUF, TX_ADR_WIDTH);
-                SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_PW_P1, TX_PLOAD_WIDTH);
-                terminals ++;
-            }
-            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
-        }
-        PORT1_SET_CE;
-    }
-}
-
-void center_detect(u8 index)
-{
-    u8 status=0x00;
-    u8 detected = 0;
-    u8 * addr;
-    if(index == 1)
-        addr = TX_ADDRESS_1;
-    else if(index == 2)
-        addr = TX_ADDRESS_2;
-    while(!detected)
-    {
-        SPI_Write_Buf(PORT1, WR_TX_PLOAD, addr, 5);
-
-        GPIOD->BRR = GPIO_Pin_10 | GPIO_Pin_11;
-
-        PORT1_SET_CE;
-        while(PORT1_IRQ);
-        PORT1_CLR_CE;
-
-        status = SPI_RDR(PORT1, STATUS);
-        if(status & TX_DS)	/*tx_ds == 0x20*/
-        {
-            detected = 1;
-            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x20);
-            SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + TX_ADDR, addr, TX_ADR_WIDTH);
-        }
-        else if(status & MAX_RT)
-        {
-            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x10);
-            GPIOD->BSRR = GPIO_Pin_11;
-        }
-    }
-}
-
 void storage_main()
 {
 }
 
-void Send_Sync()
+void handshaking_rx()
 {
+    u8 replyed = 0;
     u8 status = 0x00;
-    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_0, TX_ADR_WIDTH);
-    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_0, TX_ADR_WIDTH);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);
 
+    PORT1_CLR_CE;
+    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_0, TX_ADR_WIDTH);
+
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_AA, 0x00);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x00);
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x0F);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x7F);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x02);
-
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x70);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x06);
     SPI_Write_Buf(PORT1, WR_TX_PLOAD, sync, TX_PLOAD_WIDTH);
 
     PORT1_SET_CE;
@@ -485,9 +454,31 @@ void Send_Sync()
     {
         SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x20);
     }
+
+    Config_Receive_PORT();
+    while(replyed < 3)
+    {
+invalidreply:
+        while(PORT1_IRQ);
+
+        status = SPI_RDR(PORT1, STATUS);
+        if(status & 0x40)
+        {
+            SPI_Read_Buf(PORT1, RD_RX_PLOAD, RX_BUF, TX_PLOAD_WIDTH);
+            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
+
+            CDC_Send_DATA(RX_BUF, 32);
+            for(i=1; i<6; i++)
+            {
+                if(RX_BUF[i] != sync[i])
+                    goto invalidreply;
+            }
+            replyed |= RX_BUF[0];
+        }
+    }
 }
 
-void Receive_Sync()
+void handshaking_tx(u8 index)
 {
     u8 status=0x00;
     u8 synced = 1;
@@ -502,8 +493,9 @@ void Receive_Sync()
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x01);
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x0F);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x7f);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x03);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x70);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x07);
+
     PORT1_SET_CE;
 
     while(synced)
@@ -525,47 +517,21 @@ unsynced:
         }
         synced = 0;
     }
-}
-
-void handshaking_rx()
-{
-    u8 replyed = 0;
-    u8 status = 0x00;
-
-    Send_Sync();
-    Config_Receive_PORT();
-    while(replyed < 3)
-    {
-invalidreply:
-        while(PORT1_IRQ);
-
-        status = SPI_RDR(PORT1, STATUS);
-        if(status & 0x40)
-        {
-            SPI_Read_Buf(PORT1, RD_RX_PLOAD, RX_BUF, TX_PLOAD_WIDTH);
-            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
-
-            for(i=1; i<6; i++)
-            {
-                if(RX_BUF[i] != sync[i])
-                    goto invalidreply;
-            }
-            replyed |= RX_BUF[0];
-        }
-    }
-}
-
-void handshaking_tx(u8 index)
-{
-    Receive_Sync();
     DMA_Cmd(DMA1_Channel1, ENABLE);
     TIM_Cmd(TIM2, ENABLE);
     sync[0]=index;
     Config_Send_PORT();
 
-    if(index == 2)
+    if(index == 1)
     {
-        TIM3->CNT = 2;
+        TIM3->CNT = 100;
+        TIM_Cmd(TIM3, ENABLE);
+        while(TIM3->CNT);
+        TIM_Cmd(TIM3, DISABLE);
+    }
+    else
+    {
+        TIM3->CNT = 102;
         TIM_Cmd(TIM3, ENABLE);
         while(TIM3->CNT);
         TIM_Cmd(TIM3, DISABLE);
@@ -590,65 +556,4 @@ void DMA1_Channel1_IRQHandler()
         buffer_full = 1;
     }
 }
-
-void EXTI0_IRQHandler(void)
-{
-    u8 status = 0x00;
-	if(EXTI_GetITStatus(EXTI_Line0) != RESET)
-    {
-        EXTI_ClearITPendingBit(EXTI_Line0);
-        //while(PORT1_IRQ);
-#ifdef TRANSMITTOR
-        PORT1_CLR_CE;
-
-        status = SPI_RDR(PORT1, STATUS);
-        if(status & TX_DS)	/*tx_ds == 0x20*/
-        {
-            PORT1_SENT = 1;
-            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x20);
-        }
-        else if(status & MAX_RT)
-        {
-            PORT1_SENT = 1;
-            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x10);
-        }
-#endif
-
-#ifdef RECEIVER
-        status=SPI_RDR(PORT2, STATUS);
-        if(status & 0x40)
-        {
-            PORT_RECEIVE = 1;
-            SPI_Read_Buf(PORT2, RD_RX_PLOAD,RX_BUF,TX_PLOAD_WIDTH);
-            SPI_WRR(PORT2, WRITE_REG_NRF24L01 + STATUS, 0x40);
-        }
-    //PORT2_SET_CE;
-#endif
-    }
-}
-
-#ifdef TRANSMITTOR
-void EXTI1_IRQHandler(void)
-{
-    u8 status = 0x00;
-	if(EXTI_GetITStatus(EXTI_Line1) != RESET)
-    {
-        EXTI_ClearITPendingBit(EXTI_Line1);
-        //while(PORT2_IRQ);
-        PORT2_CLR_CE;
-
-        status = SPI_RDR(PORT2, STATUS);
-        if(status & TX_DS)	/*tx_ds == 0x20*/
-        {
-            PORT2_SENT = 1;
-            SPI_WRR(PORT2, WRITE_REG_NRF24L01 + STATUS, 0x20);
-        }
-        else if(status & MAX_RT)
-        {
-            PORT2_SENT = 1;
-            SPI_WRR(PORT2, WRITE_REG_NRF24L01 + STATUS, 0x10);
-        }
-	}
-}
-#endif
 

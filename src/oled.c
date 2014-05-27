@@ -180,10 +180,13 @@ void OLED_ShowString(u8 x,u8 y,const u8 *p)
 //初始化SSD1306
 void OLED_Init(void)
 {
-    u16 d=0xF000;
 	OLED_RST_CLR;			  		//复位
-    //delay_ms(100);
-    while(d--);
+    /*===delay==========================*/
+    TIM3->CNT = 100;
+    TIM_Cmd(TIM3, ENABLE);
+    while(TIM3->CNT);
+    TIM_Cmd(TIM3, DISABLE);
+    /*==================================*/
 	OLED_RST_SET;
 	OLED_WR_Byte(0xAE,OLED_CMD);//关闭显示
 	OLED_WR_Byte(0xD5,OLED_CMD);//设置时钟分频因子,震荡频率

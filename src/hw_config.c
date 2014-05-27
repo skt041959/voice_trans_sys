@@ -342,7 +342,7 @@ static void IntToUnicode (uint32_t value , uint8_t *pbuf , uint8_t len)
  * Output         : None.
  * Return         : None.
  *******************************************************************************/
-uint32_t CDC_Send_DATA (uint8_t *ptrBuffer, uint8_t Send_length)
+uint8_t CDC_Send_DATA (uint8_t *ptrBuffer, uint8_t Send_length)
 {
     /*if max buffer is Not reached*/
     if(Send_length < VIRTUAL_COM_PORT_DATA_SIZE)     
@@ -368,7 +368,7 @@ uint32_t CDC_Send_DATA (uint8_t *ptrBuffer, uint8_t Send_length)
  * Output         : None.
  * Return         : None.
  *******************************************************************************/
-uint32_t CDC_Receive_DATA(void)
+uint8_t CDC_Receive_DATA(void)
 { 
     /*Receive flag*/
     packet_receive = 0;

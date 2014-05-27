@@ -8,44 +8,18 @@
 #define PORT2 2
 
 //===================================
-#if defined SELF
-
-#define PORT1_SET_CE  GPIOB->BSRR = GPIO_Pin_8
-#define PORT1_CLR_CE  GPIOB->BRR = GPIO_Pin_8
-
-#define PORT2_SET_CE  GPIOB->BSRR = GPIO_Pin_9
-#define PORT2_CLR_CE  GPIOB->BRR = GPIO_Pin_9
-
-#define CSN_DESEL      GPIOA->BSRR = GPIO_Pin_0
-#define SEL_CSN_PORT1  GPIOA->BRR = GPIO_Pin_0;\
-                       GPIOA->BRR = GPIO_Pin_1;\
-                       GPIOA->BRR = GPIO_Pin_2
-#define SEL_CSN_PORT2  GPIOA->BRR = GPIO_Pin_0;\
-                       GPIOA->BSRR = GPIO_Pin_1;\
-                       GPIOA->BRR = GPIO_Pin_2
-
-#define PORT1_IRQ GPIOB->IDR & GPIO_Pin_0
-#define PORT2_IRQ GPIOB->IDR & GPIO_Pin_1
-#endif
-//===================================
-
-//===================================
-#if defined RECEIVER || defined TRANSMITTOR
-
-#define PORT1_SET_CE  GPIOA->BSRR = GPIO_Pin_2
-#define PORT1_CLR_CE  GPIOA->BRR = GPIO_Pin_2
+#define PORT1_SET_CE  GPIOC->BSRR = GPIO_Pin_4
+#define PORT1_CLR_CE  GPIOC->BRR = GPIO_Pin_4
 
 #define PORT2_SET_CE  GPIOA->BSRR = GPIO_Pin_2
 #define PORT2_CLR_CE  GPIOA->BRR = GPIO_Pin_2
 
-#define CSN_DESEL      GPIOA->BSRR = GPIO_Pin_3
-#define SEL_CSN_PORT1  GPIOA->BRR = GPIO_Pin_3
+#define CSN_DESEL      GPIOA->BSRR = GPIO_Pin_3;GPIOC->BSRR = GPIO_Pin_5
+#define SEL_CSN_PORT1  GPIOC->BRR = GPIO_Pin_5
 #define SEL_CSN_PORT2  GPIOA->BRR = GPIO_Pin_3
 
 #define PORT1_IRQ GPIOB->IDR & GPIO_Pin_0
-#define PORT2_IRQ GPIOB->IDR & GPIO_Pin_0
-
-#endif
+#define PORT2_IRQ GPIOA->IDR & GPIO_Pin_1
 //===================================
 
 // SPI(nRF24L01) commands
@@ -95,20 +69,14 @@ u8 SPI_WRR(u8 port, u8 reg,u8 value);
 u8 SPI_RDR(u8 port, u8 reg);
 u8 SPI_Read_Buf(u8 port, u8 reg,u8 *pBuf,u8 bytes);
 u8 SPI_Write_Buf(u8 port, u8 reg,u8 *pBuf,u8 bytes);
-u8 nRF24L01_RxPacket(u8 port, unsigned char *rx_buf);
-void nRF24L01_TxPacket(u8 port, unsigned char *tx_buf);
 
-void RX_Mode(u8 port);
-void TX_Mode(u8 port, u8 * tx_buf);
 void Config_Send_PORT();
 void Config_Receive_PORT();
 
 void nRF24L01_Initial();
-void nRF24L01_Config(u8 port);
-void NRF24L01_Send(u8 port);
-void NRF24L01_Receive(u8 port);
 void PORT1_Send(u8 *);
 void PORT2_Send(u8 *);
+void PORT1_Receive();
 void PORT2_Receive();
 
 #endif /*_NRF24L01_H*/

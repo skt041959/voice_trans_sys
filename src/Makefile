@@ -10,14 +10,8 @@ ifeq ($(CHIP),LD)
 	OBJS+=startup/startup_stm32f10x_ld.o
 endif
 
-ifeq ($(TARGET),TX)
-	CFLAGS+=-D TRANSMITTOR
-endif
-ifeq ($(TARGET),RX)
-	CFLAGS+=-D RECEIVER
-endif
-ifeq ($(TARGET),SELF)
-	CFLAGS+=-D SELF
+ifdef DEBUG
+	CFLAGS+=-DDEBUG
 endif
 
 #OBJS+=./newlib_stubs.o
@@ -32,7 +26,8 @@ OBJS+=./hw_config.o\
 	  ./usb_pwr.o
 
 OBJS+=./NRF24L01.o\
-	  ./oled.o
+	  ./oled.o\
+	  ./spi_flash.o
 
 OBJS+=./main.o
 

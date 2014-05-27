@@ -9,7 +9,7 @@ u8 TX_ADDRESS_2[TX_ADR_WIDTH] = {0xc3, 0xc2, 0xc3, 0xc4, 0x02};
 
 u8 RX_BUF[TX_PLOAD_WIDTH];
 
-static void Initial_NRF24L01_SPI()  //初始化IOB端口
+static void Initial_NRF24L01_SPI()
 {
     GPIO_InitTypeDef GPIO_InitStruct;
     SPI_InitTypeDef SPI_InitStruct;
@@ -60,7 +60,6 @@ static void delay1us(u8 t)
     while(--t);
 }
 
-/****向寄存器reg写一个字节，同时返回状态字节**************/
 u8 SPI_WRR(u8 port, u8 reg,u8 value)
 {
     u8 status;
@@ -78,7 +77,6 @@ u8 SPI_WRR(u8 port, u8 reg,u8 value)
     return(status);
 }
 
-/****向寄存器reg读一个字节，同时返回状态字节**************/
 u8 SPI_RDR(u8 port, u8 reg)
 {
     u8 status;
@@ -96,7 +94,6 @@ u8 SPI_RDR(u8 port, u8 reg)
     return(status);
 }
 
-/********读出bytes字节的数据*************************/
 u8 SPI_Read_Buf(u8 port, u8 reg, u8 *pBuf,u8 bytes)
 {
     u8 status,byte_ctr;
@@ -115,7 +112,6 @@ u8 SPI_Read_Buf(u8 port, u8 reg, u8 *pBuf,u8 bytes)
     return(status);
 }
 
-/****************写入bytes字节的数据*******************/
 u8 SPI_Write_Buf(u8 port, u8 reg, u8 *pBuf,u8 bytes)
 {
     u8 status,byte_ctr;
@@ -187,43 +183,49 @@ void nRF24L01_Initial()
 #endif
 }
 
-void Config_Send_PORT()
+void Repower_NRF24L01()
 {
     PORT1_CLR_CE;
+
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x00);
     TIM3->CNT = 2;
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x02);
+}
 
-    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_1, TX_ADR_WIDTH);
-    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_1, TX_ADR_WIDTH);
+void Config_Send_PORT()
+{
+    PORT1_CLR_CE;
 
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_AA, 0x01);       // 使能接收通道0自动应答
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x01);   // 使能接收通道0
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + SETUP_RETR, 0x0a);  // 自动重发延时等待250us+86us，自动重发10次
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);         // 选择射频通道0x40
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x07);    // 数据传输率1Mbps，发射功率0dBm，低噪声放大器增益
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);  // 接收通道0选择和发送通道相同有效数据宽度
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x7f);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x0e);      // CRC使能，16位CRC校验，上电
+    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_0, TX_ADR_WIDTH);
+    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_0, TX_ADR_WIDTH);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);
+
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_AA, 0x01);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x01);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + SETUP_RETR, 0x0A);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x0F);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x7F);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x0E);
     PORT1_SET_CE;
 
 #ifdef DEBUG2
     PORT2_CLR_CE;
 
-    SPI_Write_Buf(PORT2, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_1, TX_ADR_WIDTH);     // 写入发送地址
-    SPI_Write_Buf(PORT2, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_1, TX_ADR_WIDTH);  // 为了应答接收设备，接收通道1地址和发送地址相同
+    SPI_Write_Buf(PORT2, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_1, TX_ADR_WIDTH);
+    SPI_Write_Buf(PORT2, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_1, TX_ADR_WIDTH);
 
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + EN_AA, 0x3f);       // 使能接收通道0自动应答
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + EN_RXADDR, 0x3f);   // 使能接收通道0
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + SETUP_RETR, 0x0a);  // 自动重发延时等待250us+86us，自动重发10次
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RF_CH, 0x40);         // 选择射频通道0x40
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RF_SETUP, 0x07);    // 数据传输率1Mbps，发射功率0dBm，低噪声放大器增益
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);  // 接收通道0选择和发送通道相同有效数据宽度
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + EN_AA, 0x3f);
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + EN_RXADDR, 0x3f);
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + SETUP_RETR, 0x0a);
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RF_CH, 0x40);
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RF_SETUP, 0x07);
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);
     SPI_WRR(PORT2, WRITE_REG_NRF24L01 + STATUS, 0x7f);
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + CONFIG, 0x0e);      // CRC使能，16位CRC校验，上电
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + CONFIG, 0x0e);
     PORT2_SET_CE;
 #endif
 
@@ -233,12 +235,6 @@ void Config_Send_PORT()
 void Config_Receive_PORT()
 {
     PORT1_CLR_CE;
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x00);
-    TIM3->CNT = 2;
-    TIM_Cmd(TIM3, ENABLE);
-    while(TIM3->CNT);
-    TIM_Cmd(TIM3, DISABLE);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x02);
 
     SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_0, TX_ADR_WIDTH);
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);
@@ -247,29 +243,28 @@ void Config_Receive_PORT()
     //SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P2, TX_ADDRESS_2[0]);
     //SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_PW_P2, TX_PLOAD_WIDTH);
 
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_AA, 0x07);               // 使能接收通道0自动应答
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x07);           // 使能接收通道0
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);               // 选择射频通道0x40
-
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x07);            // 数据传输率1Mbps，发射功率0dBm，低噪声放大器增益
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_AA, 0x07);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x07);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x0F);
     SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x7f);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x0f);              // CRC使能，16位CRC校验，上电，接收模式
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x0f);
     PORT1_SET_CE;
 
 #ifdef DEBUG2
     PORT2_CLR_CE;
 
-    SPI_Write_Buf(PORT2, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_0, TX_ADR_WIDTH);  // 接收设备接收通道0使用和发送设备相同的发送地址
+    SPI_Write_Buf(PORT2, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_0, TX_ADR_WIDTH);
 
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);  // 接收通道0选择和发送通道相同有效数据宽度
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);
 
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + EN_AA, 0x3f);               // 使能接收通道0自动应答
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + EN_RXADDR, 0x3f);           // 使能接收通道0
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RF_CH, 0x40);                 // 选择射频通道0x40
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + EN_AA, 0x3f);
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + EN_RXADDR, 0x3f);
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RF_CH, 0x40);
 
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RF_SETUP, 0x07);            // 数据传输率1Mbps，发射功率0dBm，低噪声放大器增益
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + RF_SETUP, 0x07);
     SPI_WRR(PORT2, WRITE_REG_NRF24L01 + STATUS, 0x7f);
-    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + CONFIG, 0x0f);              // CRC使能，16位CRC校验，上电，接收模式
+    SPI_WRR(PORT2, WRITE_REG_NRF24L01 + CONFIG, 0x0f);
     PORT2_SET_CE;
 #endif
 }

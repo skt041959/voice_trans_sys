@@ -33,6 +33,12 @@ typedef enum {
     trunk = 0,
 }work_mode;
 
+u8 sync[32] = {
+    0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,
+    0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,
+    0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00,
+    0xFF,0x00,0xFF,0x00,0xFF,0x00,0xFF,0x00};
+
 void Delay (uint32_t nCount)
 {
   for(; nCount != 0; nCount--);
@@ -214,6 +220,8 @@ void terminal_detect();
 void center_detect(u8);
 u8 virtual_com_send();
 u8 spi_flash_store();
+void Send_Sync();
+void Receive_Sync();
 
 int main(void)
 {
@@ -242,7 +250,7 @@ int main(void)
     //                break;
     //}
 
-    main_thread = &terminal_main;
+    main_thread = &center_main;
     main_thread();
 #endif
 
@@ -304,6 +312,7 @@ void terminal_main()
     //    index = 2;
 
     nRF24L01_Initial();
+    Repower_NRF24L01();
 
     Config_Send_PORT();
     //center_detect(index);
@@ -321,9 +330,11 @@ void terminal_main()
         {
             buffer_full = 0;
             PORT1_Send((u8 *)(sample_values + (buffer_index2++)%2*32));
-            if( (buffer_index - buffer_index) > 1)
+            if( (buffer_index - buffer_index2) > 1)
             {
                 //TODO
+                GPIOD->BSRR = GPIO_Pin_10 | GPIO_Pin_11;
+                //USART1->DR = 0xFF;
             }
         }
     }
@@ -332,6 +343,12 @@ void terminal_main()
 void center_main()
 {
     u8 (*process_packge)();
+
+    GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);
+    Set_System();
+    Set_USBClock();
+    USB_Interrupts_Config();
+    USB_Init();
 
     //if( GPIOD->IDR & GPIO_Pin_12  )
     //{
@@ -352,30 +369,35 @@ void center_main()
 
     //NVIC_Config();
     nRF24L01_Initial();
+    Repower_NRF24L01();
 
     //u8 ADDR[5];
     //u8 rpd;
     u8 status;
     u8 * rx_buffer = Send_Buffer + 2;
+    Send_Sync();
     Config_Receive_PORT();
-    terminal_detect();
+    //terminal_detect();
 
     //SPI_Read_Buf(PORT2, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
 
     while(1)
     {
         //rpd = SPI_RDR(PORT2, READ_REG_NRF24L01 + CD);
+        GPIOD->BRR = GPIO_Pin_10 | GPIO_Pin_11;
         while(PORT1_IRQ);
 
         status = SPI_RDR(PORT1, STATUS);
         if(status & 0x40)
         {
-            Send_Buffer[1] = (status & 0x0E) >> 1;
+            GPIOD->BSRR = GPIO_Pin_10;
             SPI_Read_Buf(PORT1, RD_RX_PLOAD, rx_buffer, TX_PLOAD_WIDTH);
-
             SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
+
+            Send_Buffer[1] = (status & 0x0E) >> 1;
         }
-        process_packge();
+        //process_packge();
+        CDC_Send_DATA(Send_Buffer, 36);
     }
 }
 
@@ -444,6 +466,45 @@ void center_detect(u8 index)
 
 void storage_main()
 {
+}
+
+void Send_Sync()
+{
+    u8 status = 0x00;
+    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_0, TX_ADR_WIDTH);
+    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_0, TX_ADR_WIDTH);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);
+
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x0F);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x7F);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x02);
+
+    SPI_Write_Buf(PORT1, WR_TX_PLOAD, sync, TX_PLOAD_WIDTH);
+
+    PORT1_SET_CE;
+    while(PORT1_IRQ);
+    status = SPI_RDR(PORT1, STATUS);
+    if(status & TX_DS)	/*tx_ds == 0x20*/
+    {
+        SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x20);
+    }
+}
+
+void Receive_Sync()
+{
+    PORT1_CLR_CE;
+
+    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + RX_ADDR_P0, TX_ADDRESS_0, TX_ADR_WIDTH);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RX_PW_P0, TX_PLOAD_WIDTH);
+
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_AA, 0x00);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x01);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x0F);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x7f);
+    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x03);
+    PORT1_SET_CE;
 }
 
 u8 virtual_com_send()

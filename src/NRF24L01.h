@@ -74,6 +74,7 @@ void Config_Send_PORT();
 void Config_Receive_PORT();
 
 void nRF24L01_Initial();
+void Repower_NRF24L01();
 void PORT1_Send(u8 *);
 void PORT2_Send(u8 *);
 void PORT1_Receive();

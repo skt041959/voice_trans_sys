@@ -63,14 +63,7 @@ static void delay1us(u8 t)
 u8 SPI_WRR(u8 port, u8 reg,u8 value)
 {
     u8 status;
-    if(port == PORT1)
-    {
-        SEL_CSN_PORT1;
-    }
-    else if(port == PORT2)
-    {
-        SEL_CSN_PORT2;
-    }
+    SEL_CSN_PORT1;
     status=SPI_Receive_byte(SPI1,reg);   //select register  and write value to it
     SPI_Send_byte(SPI1,value);
     CSN_DESEL;
@@ -80,14 +73,7 @@ u8 SPI_WRR(u8 port, u8 reg,u8 value)
 u8 SPI_RDR(u8 port, u8 reg)
 {
     u8 status;
-    if(port == PORT1)
-    {
-        SEL_CSN_PORT1;
-    }
-    else if(port == PORT2)
-    {
-        SEL_CSN_PORT2;
-    }
+    SEL_CSN_PORT1;
     SPI_Send_byte(SPI1,reg);
     status=SPI_Receive_byte(SPI1,0);   //select register  and write value to it
     CSN_DESEL;
@@ -97,17 +83,12 @@ u8 SPI_RDR(u8 port, u8 reg)
 u8 SPI_Read_Buf(u8 port, u8 reg, u8 *pBuf,u8 bytes)
 {
     u8 status,byte_ctr;
-    if(port == PORT1)
-    {
-        SEL_CSN_PORT1;
-    }
-    else if(port == PORT2)
-    {
-        SEL_CSN_PORT2;
-    }
+    SEL_CSN_PORT1;
+
     status=SPI_Receive_byte(SPI1,reg);
-    for(byte_ctr=0;byte_ctr<bytes;byte_ctr++)
-        pBuf[byte_ctr]=SPI_Receive_byte(SPI1,0);
+    for(byte_ctr=0; byte_ctr<bytes; byte_ctr++)
+        pBuf[byte_ctr] = SPI_Receive_byte(SPI1,0);
+
     CSN_DESEL;
     return(status);
 }
@@ -115,18 +96,13 @@ u8 SPI_Read_Buf(u8 port, u8 reg, u8 *pBuf,u8 bytes)
 u8 SPI_Write_Buf(u8 port, u8 reg, u8 *pBuf,u8 bytes)
 {
     u8 status,byte_ctr;
-    if(port == PORT1)
-    {
-        SEL_CSN_PORT1;
-    }
-    else if(port == PORT2)
-    {
-        SEL_CSN_PORT2;
-    }
-    status=SPI_Receive_byte(SPI1,reg);
-    delay1us(1);
+    SEL_CSN_PORT1;
+    status = SPI_Receive_byte(SPI1,reg);
+    //delay1us(1);
+
     for(byte_ctr=0; byte_ctr<bytes; byte_ctr++)
         SPI_Send_byte(SPI1,*pBuf++);
+
     CSN_DESEL;
     return(status);
 }

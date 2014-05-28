@@ -76,17 +76,14 @@ void TIM3_Config()
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
 
     TIM_TimeBaseInitTypeDef TIM_TimeBaseStruct;
-    /* Compute the prescaler value */
-    /* Time base configuration */
+
     TIM_TimeBaseStruct.TIM_Period = 0xFFFF; /*ARR*/
     TIM_TimeBaseStruct.TIM_Prescaler = PrescalerValue; /*RSC*/
     TIM_TimeBaseStruct.TIM_ClockDivision = 0;
     TIM_TimeBaseStruct.TIM_CounterMode = TIM_CounterMode_Down;
 
     TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStruct);
-
-    //TIM_ClearITPendingBit(TIM3 , TIM_FLAG_Update);
-    //TIM_ITConfig(TIM3,TIM_IT_Update,ENABLE);
+    //TIM_SelectOnePulseMode(TIM3, TIM_OPMode_Single);
 }
 
 void Sampling_Config()
@@ -326,16 +323,77 @@ int main(void)
     while(1);
 }
 
+void index1()
+{
+    while(1)
+    {
+        GPIOA->BRR = GPIO_Pin_4;
+        if( (DMA1->ISR & DMA1_IT_HT1) != (uint32_t)RESET )
+        {
+            GPIOA->BSRR = GPIO_Pin_4;
+            DMA1->IFCR = DMA1_IT_HT1;
+
+            PORT1_Send((u8 *)(sample_values));
+        }
+        if( (DMA1->ISR & DMA1_IT_TC1) != (uint32_t)RESET )
+        {
+            GPIOA->BSRR = GPIO_Pin_4;
+            DMA1->IFCR = DMA1_IT_TC1;
+
+            PORT1_Send((u8 *)(sample_values + 32));
+        }
+    }
+}
+
+void index2()
+{
+    while(1)
+    {
+        GPIOA->BRR = GPIO_Pin_4;
+        if( (DMA1->ISR & DMA1_IT_HT1) != (uint32_t)RESET )
+        {
+            DMA1->IFCR = DMA1_IT_HT1;
+
+            TIM3->CNT = 20;
+            TIM3->CR1 |= TIM_CR1_CEN;
+            while(TIM3->CNT);
+            TIM3->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
+
+            GPIOA->BSRR = GPIO_Pin_4;
+            PORT1_Send((u8 *)(sample_values));
+        }
+        if( (DMA1->ISR & DMA1_IT_TC1) != (uint32_t)RESET )
+        {
+            DMA1->IFCR = DMA1_IT_TC1;
+
+            TIM3->CNT = 20;
+            TIM3->CR1 |= TIM_CR1_CEN;
+            while(TIM3->CNT);
+            TIM3->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
+
+            GPIOA->BSRR = GPIO_Pin_4;
+            PORT1_Send((u8 *)(sample_values + 32));
+        }
+    }
+}
+
 void terminal_main()
 {
     //NVIC_Config();
     Sampling_Config();
+    void (*main_thread)();
 
     u8 index = 0;
     if( GPIOD->IDR & GPIO_Pin_15 )
+    {
         index = 1;
+        main_thread = &index1;
+    }
     else
+    {
         index = 2;
+        main_thread = &index2;
+    }
 
     nRF24L01_Initial();
     Repower_NRF24L01();
@@ -347,19 +405,7 @@ void terminal_main()
     //u8 ADDR[5];
     //SPI_Read_Buf(PORT2, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
 
-    while(1)
-    {
-        if( (DMA1->ISR & DMA1_IT_HT1) != (uint32_t)RESET )
-        {
-            DMA1->IFCR = DMA1_IT_HT1;
-            PORT1_Send((u8 *)(sample_values));
-        }
-        if( (DMA1->ISR & DMA1_IT_TC1) != (uint32_t)RESET )
-        {
-            DMA1->IFCR = DMA1_IT_TC1;
-            PORT1_Send((u8 *)(sample_values + 32));
-        }
-    }
+    main_thread();
 }
 
 void center_main()
@@ -473,9 +519,6 @@ invalidreply:
             GPIOD->BRR = GPIO_Pin_10;
             SPI_Read_Buf(PORT1, RD_RX_PLOAD, RX_BUF, TX_PLOAD_WIDTH);
             SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
-            //CDC_Send_DATA(RX_BUF, 32);
-            //GPIOD->BRR = GPIO_Pin_10;
-            USART1->DR = RX_BUF[0];
 
             for(i=1; i<6; i++)
             {
@@ -484,7 +527,6 @@ invalidreply:
                     goto invalidreply;
                 }
             }
-            //CDC_Send_DATA(RX_BUF, 32);
             USART1->DR = RX_BUF[0];
             replyed |= RX_BUF[0];
         }
@@ -531,26 +573,28 @@ unsynced:
     }
     sync[0]=index;
 
-    TIM_Cmd(TIM2, ENABLE);
-    DMA_Cmd(DMA1_Channel1, ENABLE);
-
     Config_Send_PORT(index);
 
-    if(index == 1)
-        TIM3->CNT = 00;
-    else
+    if(index == 2)
+    {
         TIM3->CNT = 20;
-    TIM_Cmd(TIM3, ENABLE);
-    while(TIM3->CNT);
-    TIM_Cmd(TIM3, DISABLE);
+
+        TIM_Cmd(TIM3, ENABLE);
+        while(TIM3->CNT);
+        TIM_Cmd(TIM3, DISABLE);
+    }
     GPIOA->BSRR = GPIO_Pin_4;
+
 
     PORT1_Send(sync);
 
-    TIM3->CNT = 1000;
+    TIM3->CNT = 20;
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
+
+    TIM_Cmd(TIM2, ENABLE);
+    DMA_Cmd(DMA1_Channel1, ENABLE);
 }
 
 u8 spi_flash_store()

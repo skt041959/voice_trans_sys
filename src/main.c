@@ -13,7 +13,6 @@ extern u8 RX_BUF[];
 u8 TX_BUF[TX_PLOAD_WIDTH];
 u8 sample_values[5][32];
 u32 buffer_index = 0;
-u8 buffer_index2 = 0;
 u8 buffer_full = 0;
 
 extern u8 TX_ADDRESS_0[];
@@ -540,9 +539,9 @@ unsynced:
     Config_Send_PORT(index);
 
     if(index == 1)
-        TIM3->CNT = 1010;
+        TIM3->CNT = 1000;
     else
-        TIM3->CNT = 1030;
+        TIM3->CNT = 1020;
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
@@ -550,7 +549,7 @@ unsynced:
 
     PORT1_Send(sync);
 
-    TIM3->CNT = 100;
+    TIM3->CNT = 1000;
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);

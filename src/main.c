@@ -11,7 +11,7 @@
 
 extern u8 RX_BUF[];
 u8 TX_BUF[TX_PLOAD_WIDTH];
-u8 sample_values[2][32];
+u8 sample_values[5][32];
 u32 buffer_index = 0;
 u8 buffer_index2 = 0;
 u8 buffer_full = 0;
@@ -398,7 +398,6 @@ void center_main()
     Repower_NRF24L01();
 
     //u8 ADDR[5];
-    //u8 rpd;
     u8 status;
     u8 * rx_buffer = Send_Buffer + 2;
 
@@ -406,13 +405,14 @@ void center_main()
     handshaking_rx();
 
     //SPI_Read_Buf(PORT2, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
+    
+    TIM_Cmd(TIM3, ENABLE);
 
     while(1)
     {
-        //rpd = SPI_RDR(PORT2, READ_REG_NRF24L01 + CD);
-        GPIOD->BSRR = GPIO_Pin_11;
         GPIOD->BRR = GPIO_Pin_10;
-        while(PORT1_IRQ);
+        while(PORT1_IRQ || !TIM3->CNT);
+        TIM3->CNT = 20;
 
         status = SPI_RDR(PORT1, STATUS);
         if(status & 0x40)
@@ -424,6 +424,9 @@ void center_main()
 
             Send_Buffer[1] = (status & 0x0E) >> 1;
         }
+        else
+            GPIOD->BSRR = GPIO_Pin_11;
+
         //process_packge();
         CDC_Send_DATA(Send_Buffer, 36);
     }
@@ -485,6 +488,7 @@ invalidreply:
                 }
             }
             //CDC_Send_DATA(RX_BUF, 32);
+            USART1->DR = RX_BUF[0];
             replyed |= RX_BUF[0];
         }
     }
@@ -536,9 +540,9 @@ unsynced:
     Config_Send_PORT(index);
 
     if(index == 1)
-        TIM3->CNT = 2000;
+        TIM3->CNT = 1010;
     else
-        TIM3->CNT = 2020;
+        TIM3->CNT = 1030;
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
@@ -546,7 +550,7 @@ unsynced:
 
     PORT1_Send(sync);
 
-    TIM3->CNT = 1000;
+    TIM3->CNT = 100;
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
@@ -559,10 +563,9 @@ u8 spi_flash_store()
 
 void DMA1_Channel1_IRQHandler()
 {
-    if (DMA_GetITStatus(DMA1_IT_TC1) == SET)
+    if( (DMA1->ISR & DMA1_IT_TC1) != (uint32_t)RESET )
     {
-        DMA_ClearITPendingBit(DMA1_IT_TC1);
-        //TIM_Cmd(TIM2, DISABLE);
+        DMA1->IFCR = DMA1_IT_TC1;
         buffer_full = 1;
     }
 }

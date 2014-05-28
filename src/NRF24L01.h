@@ -70,7 +70,7 @@ u8 SPI_RDR(u8 port, u8 reg);
 u8 SPI_Read_Buf(u8 port, u8 reg,u8 *pBuf,u8 bytes);
 u8 SPI_Write_Buf(u8 port, u8 reg,u8 *pBuf,u8 bytes);
 
-void Config_Send_PORT();
+void Config_Send_PORT(u8);
 void Config_Receive_PORT();
 
 void nRF24L01_Initial();

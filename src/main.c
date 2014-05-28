@@ -12,7 +12,7 @@
 extern u8 RX_BUF[];
 u8 TX_BUF[TX_PLOAD_WIDTH];
 u8 sample_values[2][32];
-u8 buffer_index = 0;
+u32 buffer_index = 0;
 u8 buffer_index2 = 0;
 u8 buffer_full = 0;
 
@@ -27,10 +27,10 @@ uint8_t Send_Buffer[64];
 uint32_t packet_sent = 1;
 uint32_t packet_receive = 1;
 typedef enum {
-    center = 0,
+    center = 3,
     storage = 1,
     terminal = 2,
-    trunk = 3,
+    trunk = 0,
 }work_mode;
 
 u8 sync[32] = {
@@ -79,7 +79,7 @@ void TIM3_Config()
     TIM_TimeBaseInitTypeDef TIM_TimeBaseStruct;
     /* Compute the prescaler value */
     /* Time base configuration */
-    TIM_TimeBaseStruct.TIM_Period = 10; /*ARR*/
+    TIM_TimeBaseStruct.TIM_Period = 100; /*ARR*/
     TIM_TimeBaseStruct.TIM_Prescaler = PrescalerValue; /*RSC*/
     TIM_TimeBaseStruct.TIM_ClockDivision = 0;
     TIM_TimeBaseStruct.TIM_CounterMode = TIM_CounterMode_Down;
@@ -173,12 +173,16 @@ void switch_config()
 
 void LED_Config()
 {
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD, ENABLE);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOD | RCC_APB2Periph_GPIOA, ENABLE);
+
     GPIO_InitTypeDef GPIO_InitStruct;
     GPIO_InitStruct.GPIO_Pin = GPIO_Pin_10 | GPIO_Pin_11;
     GPIO_InitStruct.GPIO_Mode = GPIO_Mode_Out_PP;
     GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_4;
+    GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
 void USART_Config()
@@ -214,8 +218,6 @@ void center_main();
 void storage_main();
 void terminal_main();
 void trunk_main();
-void terminal_detect();
-void center_detect(u8);
 u8 virtual_com_send();
 u8 spi_flash_store();
 void handshaking_rx();
@@ -225,16 +227,17 @@ int main(void)
 {
     SystemInit();
     //SysTick_Config(SystemCoreClock/1000);
-
+    USART_Config();
+    switch_config();
+    LED_Config();
     TIM3_Config();
-    TIM3->CNT = 1000;
+
+    TIM3->CNT = 100;
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
 
 #ifdef RELEASE
-    LED_Config();
-    switch_config();
     mode = (uint16_t)(GPIOD->IDR & (GPIO_Pin_12 | GPIO_Pin_13)) >> 12;
     switch(mode)
     {
@@ -266,7 +269,6 @@ int main(void)
     nRF24L01_Initial();
     Repower_NRF24L01();
 
-    LED_Config();
     //GPIO_Pin_10 green
     //GPIO_Pin_11 red
 
@@ -328,6 +330,7 @@ void terminal_main()
 {
     NVIC_Config();
     Sampling_Config();
+    u8 i=0;
 
     u8 index = 0;
     if( GPIOD->IDR & GPIO_Pin_15 )
@@ -339,11 +342,10 @@ void terminal_main()
     Repower_NRF24L01();
 
     GPIOD->BSRR = GPIO_Pin_10 | GPIO_Pin_11;
+    GPIOA->BRR = GPIO_Pin_4;
     handshaking_tx(index);
-    //center_detect(index);
 
     //u8 ADDR[5];
-
     //SPI_Read_Buf(PORT2, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
 
     while(1)
@@ -351,13 +353,14 @@ void terminal_main()
         if(buffer_full)
         {
             buffer_full = 0;
-            PORT1_Send((u8 *)(sample_values + (buffer_index2++)%2*32));
-            if( (buffer_index - buffer_index2) > 1)
-            {
-                //TODO
-                GPIOD->BSRR = GPIO_Pin_10 | GPIO_Pin_11;
-                //USART1->DR = 0xFF;
-            }
+
+            DMA1_Channel1->CCR &= (uint16_t)(~DMA_CCR1_EN);
+            DMA1_Channel1->CNDTR = 0x20;
+            DMA1_Channel1->CMAR = (u32)(sample_values+(++buffer_index)%2*32);
+            DMA1_Channel1->CCR |= DMA_CCR1_EN;
+
+            PORT1_Send((u8 *)(sample_values + (buffer_index-1)%2*32));
+            //USART1->DR = buffer_index;
         }
     }
 }
@@ -389,6 +392,7 @@ void center_main()
     Send_Buffer[34] = 0xFF;
     Send_Buffer[35] = 0x00;
 
+    USART_Config();
     //NVIC_Config();
     nRF24L01_Initial();
     Repower_NRF24L01();
@@ -406,13 +410,15 @@ void center_main()
     while(1)
     {
         //rpd = SPI_RDR(PORT2, READ_REG_NRF24L01 + CD);
-        GPIOD->BRR = GPIO_Pin_10 | GPIO_Pin_11;
+        GPIOD->BSRR = GPIO_Pin_11;
+        GPIOD->BRR = GPIO_Pin_10;
         while(PORT1_IRQ);
 
         status = SPI_RDR(PORT1, STATUS);
         if(status & 0x40)
         {
             GPIOD->BSRR = GPIO_Pin_10;
+            GPIOD->BRR = GPIO_Pin_11;
             SPI_Read_Buf(PORT1, RD_RX_PLOAD, rx_buffer, TX_PLOAD_WIDTH);
             SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
 
@@ -464,15 +470,21 @@ invalidreply:
         status = SPI_RDR(PORT1, STATUS);
         if(status & 0x40)
         {
+            GPIOD->BRR = GPIO_Pin_10;
             SPI_Read_Buf(PORT1, RD_RX_PLOAD, RX_BUF, TX_PLOAD_WIDTH);
             SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
+            //CDC_Send_DATA(RX_BUF, 32);
+            //GPIOD->BRR = GPIO_Pin_10;
+            USART1->DR = RX_BUF[0];
 
-            CDC_Send_DATA(RX_BUF, 32);
             for(i=1; i<6; i++)
             {
                 if(RX_BUF[i] != sync[i])
+                {
                     goto invalidreply;
+                }
             }
+            //CDC_Send_DATA(RX_BUF, 32);
             replyed |= RX_BUF[0];
         }
     }
@@ -507,7 +519,6 @@ unsynced:
         if(status & 0x40)
         {
             SPI_Read_Buf(PORT1, RD_RX_PLOAD,RX_BUF,TX_PLOAD_WIDTH);
-
             SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x40);
         }
         for(i=0; i<6; i++)
@@ -517,26 +528,29 @@ unsynced:
         }
         synced = 0;
     }
-    DMA_Cmd(DMA1_Channel1, ENABLE);
-    TIM_Cmd(TIM2, ENABLE);
     sync[0]=index;
-    Config_Send_PORT();
+
+    TIM_Cmd(TIM2, ENABLE);
+    DMA_Cmd(DMA1_Channel1, ENABLE);
+
+    Config_Send_PORT(index);
 
     if(index == 1)
-    {
-        TIM3->CNT = 100;
-        TIM_Cmd(TIM3, ENABLE);
-        while(TIM3->CNT);
-        TIM_Cmd(TIM3, DISABLE);
-    }
+        TIM3->CNT = 2000;
     else
-    {
-        TIM3->CNT = 102;
-        TIM_Cmd(TIM3, ENABLE);
-        while(TIM3->CNT);
-        TIM_Cmd(TIM3, DISABLE);
-    }
+        TIM3->CNT = 2020;
+    TIM_Cmd(TIM3, ENABLE);
+    while(TIM3->CNT);
+    TIM_Cmd(TIM3, DISABLE);
+    GPIOA->BSRR = GPIO_Pin_4;
+
     PORT1_Send(sync);
+
+    TIM3->CNT = 1000;
+    TIM_Cmd(TIM3, ENABLE);
+    while(TIM3->CNT);
+    TIM_Cmd(TIM3, DISABLE);
+
 }
 
 u8 spi_flash_store()
@@ -549,10 +563,6 @@ void DMA1_Channel1_IRQHandler()
     {
         DMA_ClearITPendingBit(DMA1_IT_TC1);
         //TIM_Cmd(TIM2, DISABLE);
-        DMA1_Channel1->CCR &= (uint16_t)(~DMA_CCR1_EN);
-        DMA1_Channel1->CNDTR = 0x20;
-        DMA1_Channel1->CMAR = (u32)(sample_values+(++buffer_index)%2*32);
-        DMA1_Channel1->CCR |= DMA_CCR1_EN;
         buffer_full = 1;
     }
 }

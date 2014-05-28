@@ -11,8 +11,8 @@
 
 extern u8 RX_BUF[];
 u8 TX_BUF[TX_PLOAD_WIDTH];
-u8 sample_values[5][32];
-u32 buffer_index = 0;
+u8 sample_values[96];
+u8 buffer_cnt = 0;
 u8 buffer_full = 0;
 
 extern u8 TX_ADDRESS_0[];
@@ -78,7 +78,7 @@ void TIM3_Config()
     TIM_TimeBaseInitTypeDef TIM_TimeBaseStruct;
     /* Compute the prescaler value */
     /* Time base configuration */
-    TIM_TimeBaseStruct.TIM_Period = 100; /*ARR*/
+    TIM_TimeBaseStruct.TIM_Period = 0xFFFF; /*ARR*/
     TIM_TimeBaseStruct.TIM_Prescaler = PrescalerValue; /*RSC*/
     TIM_TimeBaseStruct.TIM_ClockDivision = 0;
     TIM_TimeBaseStruct.TIM_CounterMode = TIM_CounterMode_Down;
@@ -128,17 +128,18 @@ void Sampling_Config()
     DMA_InitStruct.DMA_PeripheralBaseAddr = (u32)&ADC1->DR + 1;
     DMA_InitStruct.DMA_MemoryBaseAddr = (u32)sample_values;
     DMA_InitStruct.DMA_DIR = DMA_DIR_PeripheralSRC;
-    DMA_InitStruct.DMA_BufferSize = 32;
+    DMA_InitStruct.DMA_BufferSize = 64;
     DMA_InitStruct.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
     DMA_InitStruct.DMA_MemoryInc = DMA_MemoryInc_Enable;
     DMA_InitStruct.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
     DMA_InitStruct.DMA_MemoryDataSize = DMA_MemoryDataSize_Byte;
-    DMA_InitStruct.DMA_Mode = DMA_Mode_Normal;
+    DMA_InitStruct.DMA_Mode = DMA_Mode_Circular;
     DMA_InitStruct.DMA_Priority = DMA_Priority_High;
     DMA_InitStruct.DMA_M2M = DMA_M2M_Disable;
     DMA_Init(DMA1_Channel1, &DMA_InitStruct);
 
     DMA_ITConfig(DMA1_Channel1, DMA_IT_TC, ENABLE);
+    DMA_ITConfig(DMA1_Channel1, DMA_IT_HT, ENABLE);
 
     ADC_InitTypeDef ADC_InitStruct;
     ADC_InitStruct.ADC_Mode = ADC_Mode_Independent;
@@ -327,9 +328,8 @@ int main(void)
 
 void terminal_main()
 {
-    NVIC_Config();
+    //NVIC_Config();
     Sampling_Config();
-    u8 i=0;
 
     u8 index = 0;
     if( GPIOD->IDR & GPIO_Pin_15 )
@@ -349,17 +349,15 @@ void terminal_main()
 
     while(1)
     {
-        if(buffer_full)
+        if( (DMA1->ISR & DMA1_IT_HT1) != (uint32_t)RESET )
         {
-            buffer_full = 0;
-
-            DMA1_Channel1->CCR &= (uint16_t)(~DMA_CCR1_EN);
-            DMA1_Channel1->CNDTR = 0x20;
-            DMA1_Channel1->CMAR = (u32)(sample_values+(++buffer_index)%2*32);
-            DMA1_Channel1->CCR |= DMA_CCR1_EN;
-
-            PORT1_Send((u8 *)(sample_values + (buffer_index-1)%2*32));
-            //USART1->DR = buffer_index;
+            DMA1->IFCR = DMA1_IT_HT1;
+            PORT1_Send((u8 *)(sample_values));
+        }
+        if( (DMA1->ISR & DMA1_IT_TC1) != (uint32_t)RESET )
+        {
+            DMA1->IFCR = DMA1_IT_TC1;
+            PORT1_Send((u8 *)(sample_values + 32));
         }
     }
 }
@@ -539,9 +537,9 @@ unsynced:
     Config_Send_PORT(index);
 
     if(index == 1)
-        TIM3->CNT = 1000;
+        TIM3->CNT = 00;
     else
-        TIM3->CNT = 1020;
+        TIM3->CNT = 20;
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
@@ -553,19 +551,9 @@ unsynced:
     TIM_Cmd(TIM3, ENABLE);
     while(TIM3->CNT);
     TIM_Cmd(TIM3, DISABLE);
-
 }
 
 u8 spi_flash_store()
 {
-}
-
-void DMA1_Channel1_IRQHandler()
-{
-    if( (DMA1->ISR & DMA1_IT_TC1) != (uint32_t)RESET )
-    {
-        DMA1->IFCR = DMA1_IT_TC1;
-        buffer_full = 1;
-    }
 }
 

@@ -178,7 +178,7 @@ void LED_Config()
     GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_4;
+    GPIO_InitStruct.GPIO_Pin = GPIO_Pin_4 | GPIO_Pin_1;
     GPIO_Init(GPIOA, &GPIO_InitStruct);
 }
 
@@ -353,25 +353,27 @@ void index2()
         if( (DMA1->ISR & DMA1_IT_HT1) != (uint32_t)RESET )
         {
             DMA1->IFCR = DMA1_IT_HT1;
+            GPIOA->BSRR = GPIO_Pin_4;
 
             TIM3->CNT = 20;
+
             TIM3->CR1 |= TIM_CR1_CEN;
             while(TIM3->CNT);
             TIM3->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
 
-            GPIOA->BSRR = GPIO_Pin_4;
             PORT1_Send((u8 *)(sample_values));
         }
         if( (DMA1->ISR & DMA1_IT_TC1) != (uint32_t)RESET )
         {
             DMA1->IFCR = DMA1_IT_TC1;
+            GPIOA->BSRR = GPIO_Pin_4;
 
             TIM3->CNT = 20;
+
             TIM3->CR1 |= TIM_CR1_CEN;
             while(TIM3->CNT);
             TIM3->CR1 &= (uint16_t)(~((uint16_t)TIM_CR1_CEN));
 
-            GPIOA->BSRR = GPIO_Pin_4;
             PORT1_Send((u8 *)(sample_values + 32));
         }
     }

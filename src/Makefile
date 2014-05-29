@@ -12,10 +12,13 @@ endif
 
 ifdef TX
 	CFLAGS+=-DDEBUG_TX
-else
-ifdef RX
-	CFLAGS+=-DDEBUG_RX
-else
+endif
+ifdef SM
+	CFLAGS+=-DDEBUG_SM
+endif
+
+ifndef TX
+ifndef SM
 	CFLAGS+=-DRELEASE
 endif
 endif

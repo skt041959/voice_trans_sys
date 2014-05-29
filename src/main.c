@@ -90,7 +90,7 @@ void Sampling_Config()
 {
     RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
     RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1 | RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO, ENABLE);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1 | RCC_APB2Periph_GPIOC | RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
 
     GPIO_InitTypeDef GPIO_InitStruct;
     GPIO_InitStruct.GPIO_Speed = GPIO_Speed_50MHz;
@@ -98,12 +98,12 @@ void Sampling_Config()
     GPIO_InitStruct.GPIO_Mode = GPIO_Mode_AIN;
     GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-    //GPIO_InitStruct.GPIO_Pin = GPIO_Pin_1;
+    //GPIO_InitStruct.GPIO_Pin = GPIO_Pin_2;
     //GPIO_InitStruct.GPIO_Mode = GPIO_Mode_AF_PP;
     //GPIO_Init(GPIOA, &GPIO_InitStruct);
 
     TIM_TimeBaseInitTypeDef TIM_TimeBaseStruct;
-    TIM_OCInitTypeDef TIM_OCInitStructure;
+    TIM_OCInitTypeDef TIM_OCInitStruct;
 
     TIM_TimeBaseStruct.TIM_Period=125;
     //FIXME:fix the period
@@ -112,11 +112,11 @@ void Sampling_Config()
     TIM_TimeBaseStruct.TIM_CounterMode = TIM_CounterMode_Up;
     TIM_TimeBaseInit(TIM2, &TIM_TimeBaseStruct);
 
-    TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM1;
-    TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
-    TIM_OCInitStructure.TIM_Pulse = 0x10;
-    TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_Low;
-    TIM_OC2Init(TIM2, &TIM_OCInitStructure);
+    TIM_OCInitStruct.TIM_OCMode = TIM_OCMode_PWM1;
+    TIM_OCInitStruct.TIM_OutputState = TIM_OutputState_Enable;
+    TIM_OCInitStruct.TIM_Pulse = 0x10;
+    TIM_OCInitStruct.TIM_OCPolarity = TIM_OCPolarity_Low;
+    TIM_OC2Init(TIM2, &TIM_OCInitStruct);
 
     TIM_CtrlPWMOutputs(TIM2, ENABLE);
 
@@ -251,72 +251,39 @@ int main(void)
     main_thread();
 #endif
 
-#ifdef DEBUG_TX
-    //GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);
-    //Set_System();
-    //Set_USBClock();
-    //USB_Interrupts_Config();
-    //USB_Init();
+#ifdef DEBUG_SM
+    GPIO_PinRemapConfig(GPIO_Remap_SWJ_JTAGDisable,ENABLE);
+    Set_System();
+    Set_USBClock();
+    USB_Interrupts_Config();
+    USB_Init();
 
     /*NVIC_Config();*/
-    /*Sampling_Config();*/
-    /*DMA_Cmd(DMA1_Channel1, ENABLE);*/
-    /*TIM_Cmd(TIM2, ENABLE);*/
+    Sampling_Config();
     USART_Config();
-    nRF24L01_Initial();
-    Repower_NRF24L01();
 
-    //GPIO_Pin_10 green
-    //GPIO_Pin_11 red
-
-    //Config_Send_PORT();
-    //Config_Receive_PORT();
-    //
-    PORT1_CLR_CE;
-    SPI_Write_Buf(PORT1, WRITE_REG_NRF24L01 + TX_ADDR, TX_ADDRESS_0, TX_ADR_WIDTH);
-
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_AA, 0x00);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + EN_RXADDR, 0x00);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + SETUP_AW, 0x00);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_CH, 0x40);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + RF_SETUP, 0x0F);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x70);
-    SPI_WRR(PORT1, WRITE_REG_NRF24L01 + CONFIG, 0x02);
- 
-    TX_BUF[0]=0x55;
-    u8 ADDR[5];
-    u8 tmp;
-    u8 status = 0x00;
-    SPI_Read_Buf(PORT1, READ_REG_NRF24L01 + RX_ADDR_P0, ADDR, 5);
-    tmp = SPI_RDR(PORT1, READ_REG_NRF24L01 + RX_PW_P0);
-    //SPI_Read_Buf(PORT1, READ_REG_NRF24L01 + RX_ADDR_P1, ADDR, 5);
-    //tmp = SPI_RDR(PORT1, READ_REG_NRF24L01 + RX_PW_P1);
-
-    for(i=0; i<5; i++)
-    {
-        USART1->DR = ADDR[i];
-        while((USART1->SR & USART_FLAG_TXE) == (uint16_t)RESET);
-    }
-
+    DMA_Cmd(DMA1_Channel1, ENABLE);
+    TIM_Cmd(TIM2, ENABLE);
 
     while(1)
     {
-        //PORT1_Send(TX_BUF);
-        GPIOD->BRR = GPIO_Pin_10;
-        SPI_Write_Buf(PORT1, WR_TX_PLOAD, sync, TX_PLOAD_WIDTH);
-        PORT1_SET_CE;
-        while(PORT1_IRQ);
-        PORT1_CLR_CE;
-        status = SPI_RDR(PORT1, STATUS);
-        if(status & TX_DS)	/*tx_ds == 0x20*/
+        GPIOA->BRR = GPIO_Pin_4;
+        if( (DMA1->ISR & DMA1_IT_HT1) != (uint32_t)RESET )
         {
-            SPI_WRR(PORT1, WRITE_REG_NRF24L01 + STATUS, 0x20);
-            GPIOD->BSRR = GPIO_Pin_10;
+            GPIOA->BSRR = GPIO_Pin_4;
+            DMA1->IFCR = DMA1_IT_HT1;
+
+            //PORT1_Send((u8 *)(sample_values));
+            CDC_Send_DATA(sample_values, 32);
         }
-        tmp = 0xFF;
-        while(tmp--);
- 
-        //PORT1_Receive();
+        if( (DMA1->ISR & DMA1_IT_TC1) != (uint32_t)RESET )
+        {
+            GPIOA->BSRR = GPIO_Pin_4;
+            DMA1->IFCR = DMA1_IT_TC1;
+
+            //PORT1_Send((u8 *)(sample_values + 32));
+            CDC_Send_DATA(sample_values + 32, 32);
+        }
     }
 #endif
 

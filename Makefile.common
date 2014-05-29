@@ -29,7 +29,7 @@ CFLAGS+=$(COMMONFLAGS) -Wall $(INCLUDE)
 ASFLAGS+=--gdwarf2 -v -mcpu=cortex-m3 -meabi=5
 
 # HD, MD, LD
-CHIP=MD
+CHIP=HD
 #Adust the following line to the type of MCU used
 CFLAGS+=-D STM32F10X_$(CHIP)
 CFLAGS+=-D VECT_TAB_FLASH

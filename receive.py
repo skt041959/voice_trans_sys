@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import serial
 import sys
 import time
@@ -32,7 +33,7 @@ while not port:
         print("port {0} not plugin".format(sys.argv[1]))
         time.sleep(3)
 
-while count < 500:
+while count < 500*60:
     src = port.read(36)
     data.append(src)
     print(src)
@@ -49,16 +50,13 @@ fd = open("{0}".format(time.strftime('%m-%d_%H_%M_%S')), 'wb')
 
 fd.close()
 
-def to_int(byte):
-    return int.from_bytes(j, 'little')
-
 data2 = [[j for j in i] for i in data]
 
 chan1 = []
 chan2 = []
 
-[chan1.entend(j[2:-2]) for j in data if j[1] == 0]
-[chan2.entend(j[2:-2]) for j in data if j[1] == 1]
+[chan1.extend(j[2:-2]) for j in data if j[1] == 0]
+[chan2.extend(j[2:-2]) for j in data if j[1] == 1]
 
 plt.figure(1)
 plt.plot(chan1)

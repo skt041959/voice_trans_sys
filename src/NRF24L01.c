@@ -1,7 +1,5 @@
 #include "stm32f10x.h"
 #include "NRF24L01.h"
-#include <stdio.h>
-#include <string.h>
 
 u8 TX_ADDRESS_0[TX_ADR_WIDTH] = {0xb2, 0xb2, 0xb3, 0xb4, 0x01};
 u8 TX_ADDRESS_1[TX_ADR_WIDTH] = {0xc2, 0xc2, 0xc3, 0xc4, 0x02};

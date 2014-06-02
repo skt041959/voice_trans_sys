@@ -27,7 +27,7 @@ signal.signal(signal.SIGTERM,sig_handler)
 
 while not port:
     try:
-        port = serial.Serial(usb_ids[int(sys.argv[1])])
+        port = serial.Serial(usb_ids[int(sys.argv[1])], '961200')
         print(usb_ids[int(sys.argv[1])])
         print("port {0} opened".format(sys.argv[1]))
     except serial.SerialException:

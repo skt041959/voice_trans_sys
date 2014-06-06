@@ -20,10 +20,10 @@ chan1_fft = np.fft.fft(chan1_array[0:80000]/255)/80000
 chan2_fft = np.fft.fft(chan2_array[0:80000]/255)/80000
 
 plt.figure(1)
-plt.plot(chan1)
+plt.plot(chan1[0:80])
 
 plt.figure(2)
-plt.plot(chan2)
+plt.plot(chan2[0:80])
 
 plt.figure(3)
 plt.plot(chan1_fft[1:40000])

@@ -3,8 +3,9 @@ import serial
 import sys
 import time
 import wave
+import signal
 import matplotlib.pyplot as plt
-import scipy.signal as signal
+import scipy.signal as sig
 import numpy as np
 
 usb_ids = [
@@ -72,8 +73,8 @@ f2.setframerate(8000)
 f2.writeframes(np.array(chan2).tostring())
 f2.close()
 
-chan1_array = np.array()
-chan2_array = np.array()
+chan1_array = np.array(chan1)
+chan2_array = np.array(chan2)
 
 chan1_fft = np.fft.fft(chan1_array[0:80000]/255)/80000
 chan2_fft = np.fft.fft(chan2_array[0:80000]/255)/80000

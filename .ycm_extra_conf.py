@@ -58,7 +58,7 @@ flags = [
 '-x',
 'c',
 '-isystem',
-'/home/skt/code/CodeSourcery/Sourcery_CodeBench_Lite_for_ARM_EABI/arm-none-eabi/include',
+'/usr/arm-none-eabi/',
 '-I',
 './src',
 '-I',

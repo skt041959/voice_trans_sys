@@ -27,7 +27,7 @@ $(PROGRAM).elf:$(shell find -name '*.c') $(shell find -name '*.h')
 
 tags:$(shell find -name '*.c') $(shell find -name '*.h')
 	ctags -R
-	cscope -Rbqk -I /home/skt/code/CodeSourcery/Sourcery_CodeBench_Lite_for_ARM_EABI/arm-none-eabi/include
+	cscope -Rbqk -I /usr/arm-none-eabi/include
 
 libs:
 	$(MAKE) -C libs $@
